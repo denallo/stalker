@@ -3,50 +3,24 @@ import zmq
 import json
 
 HOST = ''
-PORT = ''
+PORT = -1
 
 
-def __connect():
-    context = zmq.Context()
-    socket = context.socket(zmq.REQ)
-    socket.connect("tcp://%s:%s" % (HOST, PORT))
-    socket.send(''.encode())
-    port = socket.recv().decode()
-    socket.disconnect("tcp://%s:%s" % (HOST, PORT))
-    socket.connect("tcp://%s:%s" % (HOST, port))
-    return socket
-
-
-def __check_ret_code(code):
-    pass
-
-
-def set_proxy(host='127.0.0.1', port='20000'):
+def set_proxy(host='localhost', port=38741):
     global HOST, PORT
     HOST = host
     PORT = port
-    socket = __connect()
-    socket.send("hello".encode())
-    rsp = socket.recv()
-    if rsp:
-        return True
-    return False
 
 
 def get(url=''):
-    socket = __connect()
-
-    # package = {'METHOD': 'get', 'URL': url}
-    # socket.send(json.dumps(package))
-
-    # rsp = json.loads(socket.recv())
-    # code, data = rsp['CODE'], rsp['CONTENT']
-    # __check_ret_code(code)
-    # return data
-    thread_id = str('[%04X] ' % threading.currentThread().ident)
-    socket.send(thread_id.encode())
-    rsp = socket.recv()
-    if thread_id == rsp.decode():
+    context = zmq.Context()
+    socket = context.socket(zmq.REQ)
+    socket.connect("tcp://%s:%d" % (HOST, PORT))
+    ident = threading.currentThread().ident
+    msg = str('[%04X] ' % ident)
+    socket.send(msg.encode())
+    frame = socket.recv()
+    if msg == frame.decode():
         print('o')
     else:
         print('x')

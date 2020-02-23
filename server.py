@@ -3,34 +3,48 @@ import zmq
 import time
 import threading
 
-
-def serve(socket):
-    msg = socket.recv()
-    print(msg.decode())
-    time.sleep(3)
-    socket.send(msg)
-    socket.close()
+PORT_FRONTEND = 38741
+PORT_BACKEND = 5556
+WORKER_CNT = 10
 
 
-def listen():
+def work():
     context = zmq.Context()
-    listener = context.socket(zmq.REP)
-    listener.bind("tcp://*:20000")
+    socket = context.socket(zmq.REP)
+    socket.connect("tcp://localhost:%s" % PORT_BACKEND)
     while True:
-        listener.recv()
-        worker = context.socket(zmq.REP)
-        try:
-          # try to open a random port for the client
-          port = worker.bind_to_random_port('tcp://*')
-          thread = threading.Thread(target=serve, args=[worker])
-          thread.start()
-        except zmq.ZMQBindError:
-          port = -1
-        listener.send(str(port).encode())
+        message = socket.recv()
+        print(message.decode())
+        time.sleep(1)
+        socket.send(message)
 
 
-if __name__ == '__main__':
-  try:
-    listen()
-  except Exception as e:
-    print(repr(e))
+def dispath():
+    try:
+        context = zmq.Context(1)
+        frontend = context.socket(zmq.XREP)
+        frontend.bind("tcp://*:%d" % PORT_FRONTEND)
+        backend = context.socket(zmq.XREQ)
+        backend.bind("tcp://127.0.0.1:%d" % PORT_BACKEND)
+        zmq.device(zmq.QUEUE, frontend, backend)
+    except Exception as e:
+        print(e)
+    finally:
+        frontend.close()
+        backend.close()
+        context.term()
+
+
+if __name__ == "__main__":
+    dispathcer = threading.Thread(target=dispath)
+    dispathcer.start()
+
+    workers = []
+    for i in range(WORKER_CNT):
+        worker = threading.Thread(target=work)
+        worker.start()
+        workers.append(worker)
+    for worker in workers:
+        worker.join()
+
+    dispathcer.join()
