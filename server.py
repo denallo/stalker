@@ -19,7 +19,7 @@ def work():
         socket.send(message)
 
 
-def dispath():
+def dispatch():
     try:
         context = zmq.Context(1)
         frontend = context.socket(zmq.XREP)
@@ -36,8 +36,18 @@ def dispath():
 
 
 if __name__ == "__main__":
-    dispathcer = threading.Thread(target=dispath)
-    dispathcer.start()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-b', '--backend-port', help="", default=5556, type=int)
+    parser.add_argument('-f', '--frontend-port', help="", default=38741, type=int)
+    parser.add_argument('-w', '--worker-count', help="", default=100, type=int)
+    args = parser.parse_args()
+    PORT_BACKEND = args.backend_port
+    PORT_FRONTEND = args.frontend_port
+    WORKER_CNT = args.worker_count
+
+    dispatcher = threading.Thread(target=dispatch)
+    dispatcher.start()
 
     workers = []
     for i in range(WORKER_CNT):
@@ -47,4 +57,4 @@ if __name__ == "__main__":
     for worker in workers:
         worker.join()
 
-    dispathcer.join()
+    dispatcher.join()
