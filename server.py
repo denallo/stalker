@@ -6,6 +6,8 @@ import socks
 import requests
 import json
 import time
+import secp256k1 as ecc
+
 
 PORT_FRONTEND = 38741
 PORT_BACKEND = 5556
@@ -13,6 +15,10 @@ WORKER_CNT = 10
 AGENT_HOST = '127.0.0.1'
 AGENT_PORT = 3874
 SHADOW_CHANNEL = False
+
+PRIVATE_KEY = -1
+PUBLIC_KEY = (-1, -1)
+PEER_PUBKEY = (-1, -1)
 
 
 def work():
@@ -25,21 +31,29 @@ def work():
         socks.set_default_proxy(socks.SOCKS5, AGENT_HOST, AGENT_PORT)
 
     while True:
-        message = zmq_socket.recv()
-        time_point_0 = time.time()
-        req = json.loads(message.decode())
-        shadow = req['shadow']
-        url = req['url']
-        if shadow and SHADOW_CHANNEL:
-            socket.socket = socks.socksocket
-        else:
-            socket.socket = no_proxy_socket
-        time_point_1 = time.time()
-        rsp = requests.get(url).content
-        time_point_2 = time.time()
-        zmq_socket.send(rsp)
-        time_point_3 = time.time()
-        print("cost_prepare=%s, cost_network=%s" % (time_point_1-time_point_0, time_point_2-time_point_1))
+        msg_bytes = zmq_socket.recv()
+        msg = ''.join(['%02X' % x for x in msg_bytes])
+        if (msg_bytes[0], msg_bytes[1]) == (0xFF, 0x01):
+            # 解析客户端公钥
+            global PEER_PUBKEY
+            PEER_PUBKEY = ecc.deserialize_key_pair(msg[4:])
+            # 发送服务端公钥
+            zmq_socket.send(bytes.fromhex('FF01%s' % ecc.serialize_key_pair(PUBLIC_KEY)))
+        #
+        # else:
+        #     req = json.loads(message.decode())
+        #     shadow = req['shadow']
+        #     url = req['url']
+        #     if shadow and SHADOW_CHANNEL:
+        #         socket.socket = socks.socksocket
+        #     else:
+        #         socket.socket = no_proxy_socket
+        #     time_point_1 = time.time()
+        #     rsp = requests.get(url).content
+        #     time_point_2 = time.time()
+        #     zmq_socket.send(rsp)
+        #     time_point_3 = time.time()
+        #     print("cost_prepare=%s, cost_network=%s" % (time_point_1-time_point_0, time_point_2-time_point_1))
 
 
 def dispatch():
@@ -74,6 +88,9 @@ if __name__ == "__main__":
     AGENT_HOST = args.agent_host
     AGENT_PORT = args.agent_port
     SHADOW_CHANNEL = args.shadow_channel
+    PRIVATE_KEY = ecc.gen_private_key()
+    PUBLIC_KEY = ecc.gen_public_key(PRIVATE_KEY)
+
 
     dispatcher = threading.Thread(target=dispatch)
     dispatcher.start()

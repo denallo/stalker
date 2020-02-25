@@ -2,25 +2,63 @@
 import zmq
 import json
 import time
+import secp256k1 as ecc
 
 HOST = 'localhost'
 PORT = 38741
 LISTENING_PORT = 3874
 SHADOW_CHANNEL = False
+SOCKET = None
+PRIVATE_KEY = -1
+PUBLIC_KEY = (-1, -1)
+PEER_PUBKEY = (-1, -1)
 
 
 def get(url):
-    context = zmq.Context()
-    socket = context.socket(zmq.REQ)
-    socket.connect("tcp://%s:%d" % (HOST, PORT))
+    global SOCKET
     req = {'shadow':SHADOW_CHANNEL, 'url':url}
-    pkg = json.dumps(req)
-    socket.send(pkg.encode())
-    start = time.time()
-    rsp = socket.recv()
-    end = time.time()
-    print('cost: %ss rsp:%s' % (end-start, rsp.decode()))
-    socket.close()
+    context = json.dumps(req)
+    tp1 = time.time()
+    decrypt_keys, enc_context = ecc.encrypt(context, PRIVATE_KEY, PEER_PUBKEY)
+    enc_pkg = "%s%s" % (ecc.serialize_key_pair(decrypt_keys), enc_context)
+    tp2 = time.time()
+    SOCKET.send(enc_pkg.encode())
+    rsp = SOCKET.recv()
+    tp3 = time.time()
+    decrypt_keys_text, enc_rsp = rsp[:128], rsp[128:]
+    decrypt_keys = ecc.deserialize_key_pair(decrypt_keys_text)
+    dec_rsp = ecc.decrypt(enc_rsp, PRIVATE_KEY, decrypt_keys)
+    tp4 = time.time()
+    print('cost: package=%.2f, network=%.2f, unpack=%.2f' % (tp2-tp1, tp3-tp2, tp4-tp3))
+    print(dec_rsp)
+
+
+def connect():
+    global SOCKET, PRIVATE_KEY, PUBLIC_KEY
+    context = zmq.Context()
+    SOCKET = context.socket(zmq.REQ)
+    SOCKET.connect("tcp://%s:%d" % (HOST, PORT))
+    PRIVATE_KEY = ecc.gen_private_key()
+    PUBLIC_KEY = ecc.gen_public_key(PRIVATE_KEY)
+    # 发送公钥给服务端
+    # x, y = hex(PUBLIC_KEY[0])[2:], hex(PUBLIC_KEY[1])[2:]
+    SOCKET.send(bytes.fromhex('FF01%s' % ecc.serialize_key_pair(PUBLIC_KEY)))
+    # 接收服务端公钥
+    rsp = SOCKET.recv()
+    if (rsp[0], rsp[1]) != (0xFF, 0x01):
+        raise Exception('unknown frame: %02X %02X' % (rsp[0], rsp[1]))
+    key_text = ''.join(['%02X' % x for x in rsp[2:]])
+    global PEER_PUBKEY
+    PEER_PUBKEY = ecc.deserialize_key_pair(key_text)
+
+
+def disconnect():
+    global SOCKET, PRIVATE_KEY, PUBLIC_KEY, PEER_PUBKEY
+    SOCKET.close()
+    SOCKET = None
+    PRIVATE_KEY = -1
+    PUBLIC_KEY = (-1, -1)
+    PEER_PUBKEY = (-1, -1)
 
 
 if __name__ == '__main__':
@@ -39,6 +77,8 @@ if __name__ == '__main__':
     LISTENING_PORT = args.listening_port
     SHADOW_CHANNEL = args.shadow_channel
 
-    if args.u != '':
-        print(get(args.u))
+    connect()
+    # if args.u != '':
+    #     print(get(args.u))
+    disconnect()
 
