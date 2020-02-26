@@ -20,22 +20,17 @@ def gen_public_key(prikey):
 
 
 def gen_private_key():
-    # bits = secrets.randbelow(n)
-    # return int(hex(bits)[2:], 16)
     return secrets.randbelow(n)
 
 
-def gen_encrypt_key():
-    # bits = secrets.randbelow(n)
-    # bits_hex = hex(bits)
-    # random = int(bits_hex[2:], 16)
+def __gen_encrypt_key():
     random = secrets.randbelow(n)
     enckey = ec_secp256k1.mul(Coord(G), random)
     return enckey
 
 
 @tools.time_this_function
-def gen_decrypt_key(prikey, peer_pubkey, enckey):
+def __gen_decrypt_key(prikey, peer_pubkey, enckey):
     c1 = ec_secp256k1.add(enckey, ec_secp256k1.mul(Coord(peer_pubkey), prikey))
     c2 = ec_secp256k1.mul(Coord(G), prikey)
     return c1, c2
@@ -43,16 +38,16 @@ def gen_decrypt_key(prikey, peer_pubkey, enckey):
 
 @tools.time_this_function
 def encrypt(plain_text, prikey, peer_pubkey):
-    m = gen_encrypt_key()
-    c1, c2 = gen_decrypt_key(prikey, peer_pubkey, m)
+    m = __gen_encrypt_key()
+    c1, c2 = __gen_decrypt_key(prikey, peer_pubkey, m)
     num = int.from_bytes(plain_text.encode('utf-8'), 'big')
     enc_text = hex(m.x * num)[2:]
-    return c1, c2, enc_text
+    return (c1.x, c1.y), (c2.x, c2.y), enc_text
 
 
 @tools.time_this_function
 def decrypt(enc_text, prikey, deckeys):
-    c1, c2 = deckeys
+    c1, c2 = Coord(deckeys[0]), Coord(deckeys[1])
     kC2 = ec_secp256k1.mul(c2, prikey)
     neg_kC2 = ec_secp256k1.neg(kC2)
     enckey = ec_secp256k1.add(c1, neg_kC2)

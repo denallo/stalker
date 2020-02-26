@@ -19,14 +19,20 @@ def get(url):
     req = {'shadow':SHADOW_CHANNEL, 'url':url}
     context = json.dumps(req)
     tp1 = time.time()
-    decrypt_keys, enc_context = ecc.encrypt(context, PRIVATE_KEY, PEER_PUBKEY)
-    enc_pkg = "%s%s" % (ecc.serialize_key_pair(decrypt_keys), enc_context)
+    deckey_1, deckey_2, enc_context = ecc.encrypt(context, PRIVATE_KEY, PEER_PUBKEY)
+    enc_pkg = bytes.fromhex("%s%s%s" % (
+        ecc.serialize_key_pair(deckey_1),
+        ecc.serialize_key_pair(deckey_2),
+        enc_context))
     tp2 = time.time()
-    SOCKET.send(enc_pkg.encode())
+    SOCKET.send(enc_pkg)
     rsp = SOCKET.recv()
+    rsp = ''.join(['%02X' % x for x in rsp])
     tp3 = time.time()
-    decrypt_keys_text, enc_rsp = rsp[:128], rsp[128:]
-    decrypt_keys = ecc.deserialize_key_pair(decrypt_keys_text)
+    decrypt_keys_text, enc_rsp = rsp[:256], rsp[256:]
+    deckey_1 = ecc.deserialize_key_pair(decrypt_keys_text[:128])
+    deckey_2 = ecc.deserialize_key_pair(decrypt_keys_text[128:])
+    decrypt_keys = (deckey_1, deckey_2)
     dec_rsp = ecc.decrypt(enc_rsp, PRIVATE_KEY, decrypt_keys)
     tp4 = time.time()
     print('cost: package=%.2f, network=%.2f, unpack=%.2f' % (tp2-tp1, tp3-tp2, tp4-tp3))
@@ -41,7 +47,6 @@ def connect():
     PRIVATE_KEY = ecc.gen_private_key()
     PUBLIC_KEY = ecc.gen_public_key(PRIVATE_KEY)
     # 发送公钥给服务端
-    # x, y = hex(PUBLIC_KEY[0])[2:], hex(PUBLIC_KEY[1])[2:]
     SOCKET.send(bytes.fromhex('FF01%s' % ecc.serialize_key_pair(PUBLIC_KEY)))
     # 接收服务端公钥
     rsp = SOCKET.recv()
@@ -78,7 +83,7 @@ if __name__ == '__main__':
     SHADOW_CHANNEL = args.shadow_channel
 
     connect()
-    # if args.u != '':
-    #     print(get(args.u))
+    if args.u != '':
+        print(get(args.u))
     disconnect()
 

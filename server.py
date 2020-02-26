@@ -15,7 +15,6 @@ WORKER_CNT = 10
 AGENT_HOST = '127.0.0.1'
 AGENT_PORT = 3874
 SHADOW_CHANNEL = False
-
 PRIVATE_KEY = -1
 PUBLIC_KEY = (-1, -1)
 PEER_PUBKEY = (-1, -1)
@@ -30,30 +29,40 @@ def work():
     if SHADOW_CHANNEL:
         socks.set_default_proxy(socks.SOCKS5, AGENT_HOST, AGENT_PORT)
 
+    global PEER_PUBKEY
     while True:
         msg_bytes = zmq_socket.recv()
         msg = ''.join(['%02X' % x for x in msg_bytes])
         if (msg_bytes[0], msg_bytes[1]) == (0xFF, 0x01):
             # 解析客户端公钥
-            global PEER_PUBKEY
             PEER_PUBKEY = ecc.deserialize_key_pair(msg[4:])
             # 发送服务端公钥
             zmq_socket.send(bytes.fromhex('FF01%s' % ecc.serialize_key_pair(PUBLIC_KEY)))
-        #
-        # else:
-        #     req = json.loads(message.decode())
-        #     shadow = req['shadow']
-        #     url = req['url']
-        #     if shadow and SHADOW_CHANNEL:
-        #         socket.socket = socks.socksocket
-        #     else:
-        #         socket.socket = no_proxy_socket
-        #     time_point_1 = time.time()
-        #     rsp = requests.get(url).content
-        #     time_point_2 = time.time()
-        #     zmq_socket.send(rsp)
-        #     time_point_3 = time.time()
-        #     print("cost_prepare=%s, cost_network=%s" % (time_point_1-time_point_0, time_point_2-time_point_1))
+        else:
+            # 解密数据包
+            decrypt_keys_text, enc_rsp = msg[:256], msg[256:]
+            deckey_1 = ecc.deserialize_key_pair(decrypt_keys_text[:128])
+            deckey_2 = ecc.deserialize_key_pair(decrypt_keys_text[128:])
+            decrypt_keys = (deckey_1, deckey_2)
+            # decrypt_keys = ecc.deserialize_key_pair(decrypt_keys_text)
+            json_str = ecc.decrypt(enc_rsp, PRIVATE_KEY, decrypt_keys).strip(b'\x00'.decode())
+            dec_msg = json.loads(json_str)
+            shadow = dec_msg['shadow']
+            url = dec_msg['url']
+            if shadow and SHADOW_CHANNEL:
+                socket.socket = socks.socksocket
+            else:
+                socket.socket = no_proxy_socket
+            rsp = requests.get(url).content.decode()
+            # 加密响应数据
+            deckey_1, deckey_2,  enc_context = ecc.encrypt(rsp, PRIVATE_KEY, PEER_PUBKEY)
+            # decrypt_keys = (deckey_x, deckey_y)
+            # enc_pkg = bytes.fromhex("%s%s" % (ecc.serialize_key_pair(decrypt_keys), enc_context))
+            enc_pkg = bytes.fromhex("%s%s%s" % (
+                ecc.serialize_key_pair(deckey_1),
+                ecc.serialize_key_pair(deckey_2),
+                enc_context))
+            zmq_socket.send(enc_pkg)
 
 
 def dispatch():
