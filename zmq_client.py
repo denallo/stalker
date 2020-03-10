@@ -6,7 +6,7 @@ import secp256k1 as ecc
 
 HOST = 'localhost'
 PORT = 38741
-LISTENING_PORT = 3874
+LISTENING_PORT = 3875
 SHADOW_CHANNEL = False
 SOCKET = None
 PRIVATE_KEY = -1
@@ -69,7 +69,7 @@ def disconnect():
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-l', '--listening-port', help="local listening port", default=3874)
+    parser.add_argument('-l', '--listening-port', help="local listening port", default=3875)
     parser.add_argument('-s', '--server-address', help='host address of proxy service', default='127.0.0.1')
     parser.add_argument('-p', '--port', help='listening port of proxy service', default=38741)
     parser.add_argument('--logging-dir', action='store_true')

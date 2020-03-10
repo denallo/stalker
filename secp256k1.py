@@ -1,7 +1,7 @@
 # coding: utf-8
 import tools
 import secrets
-from ec import EC, Coord
+from ecc import EC, Coord
 
 
 '''secp256k1椭圆曲线参数'''
@@ -82,7 +82,7 @@ if __name__ == '__main__':
     # user-b 生成密钥对
     private_b = gen_private_key()
     # user-b 加密明文
-    text = 'The Times 03/Jan/2009 Chancellor on brink of second bailout for banks.'
-    deckey1, deckey2, secrets_text = encrypt(text, private_b, public_a)
+    _text = 'The Times 03/Jan/2009 Chancellor on brink of second bailout for banks.'
+    deckey1, deckey2, secrets_text = encrypt(_text, private_b, public_a)
     # user-a 解密文
     print(decrypt(secrets_text, private_a, (deckey1, deckey2)))
